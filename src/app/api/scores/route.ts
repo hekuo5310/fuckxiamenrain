@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { getPrisma } from '@/lib/db'
 import { getSessionFromCookies } from '@/lib/auth'
 
 // 提交游戏成绩，需已验证账号
@@ -8,7 +8,8 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: '未登录' }, { status: 401 })
   }
-  const user = await db.user.findById(session.userId)
+  const prisma = getPrisma()
+  const user = await prisma.user.findUnique({ where: { id: session.userId } })
   if (!user || !user.verified) {
     return NextResponse.json({ error: '请先验证邮箱后再提交成绩' }, { status: 403 })
   }
@@ -33,21 +34,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '成绩异常' }, { status: 400 })
   }
 
-  const record = await db.score.create({
-    userId: user.id,
-    score,
-    distance,
-    survivalMs,
-    maxHp,
-    finalRep,
-    umbrellaMs,
-    crashes,
+  const record = await prisma.score.create({
+    data: { userId: user.id, score, distance, survivalMs, maxHp, finalRep, umbrellaMs, crashes },
   })
 
   // 若提供且不同，更新昵称
   const newDisplayName = String(body?.displayName || '').trim().slice(0, 16)
   if (newDisplayName && newDisplayName !== user.displayName) {
-    await db.user.setDisplayName(user.id, newDisplayName)
+    await prisma.user.update({ where: { id: user.id }, data: { displayName: newDisplayName } })
   }
 
   return NextResponse.json({ ok: true, id: record.id })
@@ -58,6 +52,11 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ scores: [] })
   }
-  const scores = await db.score.findByUser(session.userId, 20)
+  const prisma = getPrisma()
+  const scores = await prisma.score.findMany({
+    where: { userId: session.userId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
   return NextResponse.json({ scores })
 }

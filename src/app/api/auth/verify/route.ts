@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { getPrisma } from '@/lib/db'
 import { getSessionFromCookies } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
@@ -20,12 +20,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '验证码格式不正确（6 位数字）' }, { status: 400 })
   }
 
-  const record = await db.verificationCode.findLatestUnconsumed(session.email, 'register')
+  const prisma = getPrisma()
+  const record = await prisma.verificationCode.findFirst({
+    where: { email: session.email, purpose: 'register', consumed: false },
+    orderBy: { createdAt: 'desc' },
+  })
 
   if (!record) {
     return NextResponse.json({ error: '请先发送验证码 / No code issued' }, { status: 404 })
   }
-  if (new Date(record.expiresAt) < new Date()) {
+  if (record.expiresAt < new Date()) {
     return NextResponse.json({ error: '验证码已过期，请重新发送' }, { status: 410 })
   }
   if (record.code !== code) {
@@ -33,15 +37,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 原子：消费验证码 + 标记用户已验证
-  await db.batch([
-    { sql: 'UPDATE VerificationCode SET consumed = 1 WHERE id = ?', params: [record.id] },
-    { sql: 'UPDATE User SET verified = 1, updatedAt = ? WHERE id = ?', params: [new Date().toISOString(), session.userId] },
+  await prisma.$transaction([
+    prisma.verificationCode.update({ where: { id: record.id }, data: { consumed: true } }),
+    prisma.user.update({ where: { id: session.userId }, data: { verified: true } }),
   ])
 
-  const u = await db.user.findById(session.userId)
+  const user = await prisma.user.findUnique({ where: { id: session.userId } })
   return NextResponse.json({
     ok: true,
-    user: u && { id: u.id, email: u.email, displayName: u.displayName, verified: !!u.verified },
+    user: user && { id: user.id, email: user.email, displayName: user.displayName, verified: user.verified },
   })
 }
 

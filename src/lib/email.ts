@@ -1,5 +1,5 @@
 import { getEnv } from '@/lib/cloudflare'
-import { devMail, verificationCode } from '@/lib/db'
+import { getPrisma } from '@/lib/db'
 
 // 邮件发送服务。
 // 生产：直接调用 CF Email Send 绑定 env.MAILER.send(EmailMessage)，
@@ -33,11 +33,14 @@ export async function sendEmail(opts: {
   }
 
   // dev fallback：落 DevMail 表
-  await devMail.create({
-    userId: opts.userId ?? null,
-    toEmail: opts.toEmail,
-    subject: opts.subject,
-    body: opts.body,
+  const prisma = getPrisma()
+  await prisma.devMail.create({
+    data: {
+      userId: opts.userId ?? null,
+      toEmail: opts.toEmail,
+      subject: opts.subject,
+      body: opts.body,
+    },
   })
   console.log(
     `[mail] to=${opts.toEmail} subject="${opts.subject}"\n${opts.body}\n---`
@@ -54,11 +57,17 @@ export async function issueVerificationCode(
   purpose: string = 'register',
   userId?: string | null
 ) {
+  const prisma = getPrisma()
   // 作废该 email+purpose 之前未消费的验证码
-  await verificationCode.invalidateUnconsumed(email, purpose)
+  await prisma.verificationCode.updateMany({
+    where: { email, purpose, consumed: false },
+    data: { consumed: true },
+  })
   const code = generateCode()
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 15).toISOString() // 15 分钟
-  await verificationCode.create({ email, code, purpose, expiresAt })
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 15) // 15 分钟
+  await prisma.verificationCode.create({
+    data: { email, code, purpose, expiresAt },
+  })
 
   const subject =
     purpose === 'register'

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { getPrisma } from '@/lib/db'
 import { getSessionFromCookies } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
@@ -7,17 +7,13 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ user: null })
   }
-  const u = await db.user.findById(session.userId)
-  if (!u) {
+  const prisma = getPrisma()
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, email: true, displayName: true, verified: true, createdAt: true },
+  })
+  if (!user) {
     return NextResponse.json({ user: null })
   }
-  return NextResponse.json({
-    user: {
-      id: u.id,
-      email: u.email,
-      displayName: u.displayName,
-      verified: !!u.verified,
-      createdAt: u.createdAt,
-    },
-  })
+  return NextResponse.json({ user })
 }

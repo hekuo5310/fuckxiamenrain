@@ -36,11 +36,10 @@
 
 ## 🧱 技术栈
 
-- **Next.js 16**（App Router）+ **TypeScript** + **React 19**
+- **Next.js 16**（App Router）+ **TypeScript** + **React 19**，经 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 适配到 Cloudflare Workers
 - **Tailwind CSS 4** + **shadcn/ui**（new-york）
-- **Cloudflare D1**（SQLite 兼容）+ **Email Send** + **KV**，经 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 跑在 Workers
+- **Cloudflare D1**（经 `@prisma/adapter-d1`，Prisma 驱动）+ **Email Send** + **KV**
 - 密码哈希 WebCrypto PBKDF2，session 用 HMAC 签名 cookie（无服务端存储，适配 Workers 无状态）
-- `prisma/schema.prisma` 仅作 schema 参考，运行时数据访问走 D1 原生 SQL（见 `src/lib/db.ts`）
 
 ## 📁 项目结构
 
@@ -59,11 +58,11 @@ src/
 ├─ lib/
 │  ├─ auth.ts             # WebCrypto PBKDF2 哈希 + HMAC session
 │  ├─ cloudflare.ts       # getEnv()：从 getCloudflareContext() 取 D1/KV/Email 绑定
-│  ├─ db.ts               # D1 数据访问层（binding pixel_ride，原生 SQL）
+│  ├─ db.ts               # getPrisma()：PrismaClient + @prisma/adapter-d1（binding pixel_ride）
 │  ├─ email.ts            # 生产 env.MAILER.send(EmailMessage)，dev 落 DevMail
 │  └─ game/engine.ts      # 像素游戏引擎
 └─ hooks/
-prisma/schema.prisma      # schema 参考（运行时不用 Prisma）
+prisma/schema.prisma      # Prisma schema（driverAdapters，类型源）
 migrations/0001_init.sql  # D1 初始 schema（User/Score/VerificationCode/DevMail）
 wrangler.toml             # Cloudflare Workers 部署配置
 open-next.config.ts       # OpenNext 构建配置
@@ -71,35 +70,35 @@ open-next.config.ts       # OpenNext 构建配置
 
 ## 🚀 本地开发
 
-需要 Node 20+ 与 [bun](https://bun.sh)（项目用 `bun.lock`）。本地 dev 经 OpenNext 的 `initOpenNextCloudflareForDev()` 启动 miniflare，让 `next dev` 也能拿到 wrangler.toml 的 D1/KV/Email 绑定。
+需要 Node 20+ 与 npm。本地 dev 经 OpenNext 的 `initOpenNextCloudflareForDev()` 启动 miniflare，让 `next dev` 也能拿到 wrangler.toml 的 D1/KV/Email 绑定。
 
 ```bash
-bun install
-cp .env.example .env            # 编辑 SESSION_SECRET
-bun run cf:types                # 生成 worker-configuration.d.ts（D1/KV/Email 类型）
-bun run d1:migrate:local        # 本地 miniflare D1 建表
-bun run dev                     # http://localhost:3000
+npm install
+cp .env.example .env            # 编辑 SESSION_SECRET（DATABASE_URL 仅给 prisma generate 用，运行时不连）
+npm run db:generate             # 生成 Prisma client（含 driverAdapters）
+npm run cf:types                # 生成 worker-configuration.d.ts（D1/KV/Email 类型）
+npm run d1:migrate:local        # 本地 miniflare D1 建表
+npm run dev                     # http://localhost:3000
 ```
 
 常用脚本：
 
 ```bash
-bun run lint                  # ESLint
-bun run d1:query:local "SQL"  # 本地 D1 查询，如 "SELECT * FROM User"
-bun run build                 # Next.js standalone 构建
+npm run lint                  # ESLint
+npm run d1:query:local "SQL"  # 本地 D1 查询，如 "SELECT * FROM User"
+npm run build                 # Next.js 构建
 ```
 
-> 本地 dev 下邮件不发真信，验证码落 DevMail 表，可在页面右侧 **开发邮箱** 面板查看，或读 `dev.log` 中 `[mail] ...` 日志。
+> 本地 dev 下邮件不发真信，验证码落 DevMail 表，可在页面右侧 **开发邮箱** 面板查看，或读终端 `[mail] ...` 日志。
 
 ## ☁️ Cloudflare 部署
 
 Next.js App Router 跑在 Workers 上，经 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 把 `next build` 产物编译成单个 Worker。
 
-### 1. 安装边缘依赖
+### 1. 安装依赖
 
 ```bash
-bun add -D wrangler @opennextjs/cloudflare
-bun install
+npm install
 ```
 
 ### 2. 创建 D1 并写回 database_id
@@ -113,7 +112,7 @@ wrangler d1 create pixel-ride
 ### 3. 应用 D1 迁移
 
 ```bash
-bun run d1:migrate:remote     # wrangler d1 migrations apply pixel-ride --remote
+npm run d1:migrate:remote     # wrangler d1 migrations apply pixel-ride --remote
 ```
 
 ### 4. 设置密钥
@@ -125,10 +124,11 @@ wrangler secret put SESSION_SECRET      # 32+ 位随机串：openssl rand -hex 3
 ### 5. 生成类型、构建并部署
 
 ```bash
-bun run cf:types              # wrangler types → worker-configuration.d.ts（D1/KV/Email 类型）
-bun run cf:build              # npx @opennextjs/cloudflare build → .open-next/
-bun run cf:deploy             # wrangler deploy
-bun run cf:tail               # 实时日志
+npm run db:generate           # prisma generate（含 driverAdapters client）
+npm run cf:types              # wrangler types → worker-configuration.d.ts
+npm run cf:build              # npx @opennextjs/cloudflare build → .open-next/
+npm run cf:deploy             # wrangler deploy
+npm run cf:tail               # 实时日志
 ```
 
 ### Email Send 绑定
@@ -142,18 +142,25 @@ bun run cf:tail               # 实时日志
 
 ## ✅ 部署就绪状态
 
-D1 + Email Send + auth 均已切到 Workers 原生实现，本地 dev 与生产同源代码：
+D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本地 dev 与生产同源代码：
 
 | 模块 | 实现 |
 |------|------|
 | 前端 / 游戏引擎 | Next.js + Canvas，OpenNext 构建到 Workers |
 | 路由 / API | Next.js route handler，Node runtime 经 `nodejs_compat` |
-| 数据访问 `db.ts` | D1 原生 SQL（binding `pixel_ride`），`getCloudflareContext()` 取 env |
+| 数据访问 `db.ts` | Prisma + `@prisma/adapter-d1`（binding `pixel_ride`），`getCloudflareContext()` 取 env |
 | 密码哈希 `auth.ts` | WebCrypto PBKDF2（单次 `deriveBits`，不超 Workers CPU 限制） |
 | session | HMAC-SHA256 签名 cookie，无服务端存储 |
 | 邮件 `email.ts` | 生产 `env.MAILER.send(EmailMessage)`；dev 落 DevMail 表 |
 
-> `prisma/schema.prisma` 与 `db/custom.db` 为历史 Prisma/SQLite 遗留，仅作参考，运行时不使用。可按需删除。
+### ⚠️ 部署前需验证（网络受限，无法在线确认精确 API）
+
+1. **Prisma WASM engine** — Workers 不能跑 rust native query engine。确认 `@prisma/client` 在边缘用 WASM engine 生成。参考 Prisma 官方 Cloudflare D1 部署文档，可能需 `binaryTargets` 或 edge engine 配置。`npm run cf:build` 后若报 query engine 相关错误即此问题。
+2. **Workers 包大小** — Prisma WASM client 较大，免费版 Workers 1MB 压缩限制可能超限；付费版 10MB。`cf:build` 输出体积需检查。
+3. **`getCloudflareContext()` 形式** — 当前同步调用。OpenNext 版本若需 async，改 `await getCloudflareContext({ async: true })`。
+4. **Email Send API** — 当前用 CF 标准 `new EmailMessage(from, to, mimeMsg)` + `mimetext` + `cloudflare:email` 模块。若你用的新版对象式 API 不同，改 `src/lib/email.ts`。
+
+> `db/custom.db` 为本地旧 SQLite 遗留，运行时不使用，可删。
 
 ## 🗺 路线图
 
