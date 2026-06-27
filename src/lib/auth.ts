@@ -1,8 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
 /**
- * Hash a password using PBKDF2 (works on Cloudflare Workers via WebCrypto too,
- * but Node crypto is used here for the sandbox dev server).
+ * 用 PBKDF2 哈希密码（Cloudflare Workers 也可用 WebCrypto 实现，
+ * 这里沙箱 dev server 用 Node crypto）。
+ *
+ * 边缘环境备注：Node crypto 靠 `nodejs_compat` 可用（见 wrangler.toml）。
+ * 若想彻底去掉 Node 依赖，可移植到 `crypto.subtle`（PBKDF2 + HMAC-SHA256
+ * 走 WebCrypto），session 签名改为 `crypto.subtle.sign('HMAC', ...)`。
  */
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex')
@@ -10,7 +14,7 @@ export function hashPassword(password: string): string {
   const hash = createHash('sha256')
     .update(salt + password + ':pixelride')
     .digest('hex')
-  // Multiple rounds for stronger hash
+  // 多轮迭代增强哈希强度
   let final = hash
   for (let i = 0; i < iterations; i++) {
     final = createHash('sha256').update(final).digest('hex')

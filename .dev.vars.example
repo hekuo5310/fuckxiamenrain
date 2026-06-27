@@ -1,0 +1,4 @@
+# `wrangler dev`（本地 Workers 运行时）的密钥。复制为 .dev.vars 使用。
+# .dev.vars 已被 gitignore —— 切勿提交真实密钥。
+# 生成：openssl rand -hex 32
+SESSION_SECRET="替换成一段足够长的随机密钥"

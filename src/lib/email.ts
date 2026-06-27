@@ -1,11 +1,10 @@
 import { db } from '@/lib/db'
 
 /**
- * Email sending service.
+ * 邮件发送服务。
  *
- * In production on Cloudflare Workers this would call the native
- * `send_email` binding (MailChannels / Email Routing) configured in
- * `wrangler.toml`. e.g.:
+ * 生产环境在 Cloudflare Workers 上应调用原生 `send_email` 绑定
+ * （MailChannels / Email Routing，在 wrangler.toml 配置）。例如：
  *
  *   await env.MAILER.send({
  *     from: "Pixel Ride <no-reply@pixelride.dev>",
@@ -14,10 +13,9 @@ import { db } from '@/lib/db'
  *     text: body,
  *   })
  *
- * In this sandbox we cannot reach a real SMTP gateway, so we persist
- * the message into the `DevMail` table (a KV-like mailbox) that the
- * player can read in-app via the "Dev Mailbox" panel. This keeps the
- * auth + verification flow fully functional end-to-end.
+ * 沙箱环境无法连真实 SMTP 网关，故把邮件落库到 `DevMail` 表
+ * （类似 KV 的邮箱），玩家可在应用内「开发邮箱」面板查看。
+ * 这样注册 + 验证流程可端到端完整跑通。
  */
 
 const FROM = 'Pixel Ride <no-reply@pixelride.dev>'

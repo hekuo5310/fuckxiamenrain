@@ -10,7 +10,17 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "cf:build": "npx @opennextjs/cloudflare build",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy",
+    "cf:deploy:prod": "wrangler deploy --env production",
+    "cf:tail": "wrangler tail",
+    "d1:migrate:local": "wrangler d1 migrations apply pixel-ride --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply pixel-ride --remote",
+    "d1:query:local": "wrangler d1 execute pixel-ride --local --command",
+    "d1:query:remote": "wrangler d1 execute pixel-ride --remote --command"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -89,6 +99,8 @@
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4",
+    "@opennextjs/cloudflare": "^1"
   }
 }
