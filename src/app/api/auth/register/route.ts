@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, verifyPassword, createSession, SESSION_COOKIE } from '@/lib/auth'
+import { hashPassword, createSession, SESSION_COOKIE } from '@/lib/auth'
 import { issueVerificationCode } from '@/lib/email'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -24,22 +24,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '密码至少 6 位 / Password too short (min 6)' }, { status: 400 })
   }
 
-  const existing = await db.user.findUnique({ where: { email } })
+  const existing = await db.user.findByEmail(email)
   if (existing) {
     return NextResponse.json({ error: '该邮箱已注册 / Email already registered' }, { status: 409 })
   }
 
-  const user = await db.user.create({
-    data: { email, passwordHash: hashPassword(password), displayName, verified: false },
+  const created = await db.user.create({
+    email,
+    passwordHash: await hashPassword(password),
+    displayName,
+    verified: false,
   })
 
-  await issueVerificationCode(email, 'register', user.id)
+  await issueVerificationCode(email, 'register', created.id)
 
-  // Auto-login (unverified) so the user can verify in-app.
-  const token = createSession({ id: user.id, email, displayName })
+  // 自动登录（未验证），便于在应用内验证
+  const token = createSession({ id: created.id, email, displayName })
   const res = NextResponse.json({
     ok: true,
-    user: { id: user.id, email, displayName, verified: false },
+    user: { id: created.id, email, displayName, verified: false },
     message: '注册成功，验证码已发送到你的邮箱（开发环境请到"开发邮箱"面板查看）。',
   })
   res.cookies.set(SESSION_COOKIE, token, {

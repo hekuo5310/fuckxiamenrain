@@ -40,6 +40,7 @@ yarn-error.log*
 .dev.vars
 .open-next/
 .wrangler/
+worker-configuration.d.ts
 
 
 # typescript

@@ -7,12 +7,17 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ user: null })
   }
-  const user = await db.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, email: true, displayName: true, verified: true, createdAt: true },
-  })
-  if (!user) {
+  const u = await db.user.findById(session.userId)
+  if (!u) {
     return NextResponse.json({ user: null })
   }
-  return NextResponse.json({ user })
+  return NextResponse.json({
+    user: {
+      id: u.id,
+      email: u.email,
+      displayName: u.displayName,
+      verified: !!u.verified,
+      createdAt: u.createdAt,
+    },
+  })
 }

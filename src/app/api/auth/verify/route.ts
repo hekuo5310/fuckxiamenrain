@@ -20,30 +20,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '验证码格式不正确（6 位数字）' }, { status: 400 })
   }
 
-  const record = await db.verificationCode.findFirst({
-    where: { email: session.email, purpose: 'register', consumed: false },
-    orderBy: { createdAt: 'desc' },
-  })
+  const record = await db.verificationCode.findLatestUnconsumed(session.email, 'register')
 
   if (!record) {
     return NextResponse.json({ error: '请先发送验证码 / No code issued' }, { status: 404 })
   }
-  if (record.expiresAt < new Date()) {
+  if (new Date(record.expiresAt) < new Date()) {
     return NextResponse.json({ error: '验证码已过期，请重新发送' }, { status: 410 })
   }
   if (record.code !== code) {
     return NextResponse.json({ error: '验证码不正确' }, { status: 400 })
   }
 
-  await db.$transaction([
-    db.verificationCode.update({ where: { id: record.id }, data: { consumed: true } }),
-    db.user.update({ where: { id: session.userId }, data: { verified: true } }),
+  // 原子：消费验证码 + 标记用户已验证
+  await db.batch([
+    { sql: 'UPDATE VerificationCode SET consumed = 1 WHERE id = ?', params: [record.id] },
+    { sql: 'UPDATE User SET verified = 1, updatedAt = ? WHERE id = ?', params: [new Date().toISOString(), session.userId] },
   ])
 
-  const user = await db.user.findUnique({ where: { id: session.userId } })
+  const u = await db.user.findById(session.userId)
   return NextResponse.json({
     ok: true,
-    user: user && { id: user.id, email: user.email, displayName: user.displayName, verified: user.verified },
+    user: u && { id: u.id, email: u.email, displayName: u.displayName, verified: !!u.verified },
   })
 }
 

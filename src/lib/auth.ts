@@ -1,51 +1,70 @@
-import { createHash, randomBytes, timingSafeEqual } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 
-/**
- * 用 PBKDF2 哈希密码（Cloudflare Workers 也可用 WebCrypto 实现，
- * 这里沙箱 dev server 用 Node crypto）。
- *
- * 边缘环境备注：Node crypto 靠 `nodejs_compat` 可用（见 wrangler.toml）。
- * 若想彻底去掉 Node 依赖，可移植到 `crypto.subtle`（PBKDF2 + HMAC-SHA256
- * 走 WebCrypto），session 签名改为 `crypto.subtle.sign('HMAC', ...)`。
- */
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString('hex')
-  const iterations = 100000
-  const hash = createHash('sha256')
-    .update(salt + password + ':pixelride')
-    .digest('hex')
-  // 多轮迭代增强哈希强度
-  let final = hash
-  for (let i = 0; i < iterations; i++) {
-    final = createHash('sha256').update(final).digest('hex')
-  }
-  return `pbkdf2$${iterations}$${salt}$${final}`
+// 密码哈希用 WebCrypto PBKDF2（Workers + Node 通用，单次 deriveBits 原生调用，
+// 避免 Node crypto 多轮循环在 Workers CPU 限制下超时）。
+// session 用 HMAC-SHA256，createHash 单次调用，nodejs_compat 下可接受。
+// SESSION_SECRET 经 `wrangler secret put SESSION_SECRET` 注入，Workers 上 process.env 可读。
+
+const enc = new TextEncoder()
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || 'pixel-ride-dev-secret-change-me-in-prod-9f2a7c'
+
+function toHex(buf: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < buf.length; i++) s += buf[i].toString(16).padStart(2, '0')
+  return s
+}
+function fromHex(s: string): Uint8Array {
+  const arr = new Uint8Array(s.length / 2)
+  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(s.substr(i * 2, 2), 16)
+  return arr
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const iterations = 100000
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  )
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    keyMaterial,
+    256
+  )
+  return `pbkdf2$${iterations}$${toHex(salt)}$${toHex(new Uint8Array(bits))}`
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   try {
     const parts = stored.split('$')
     if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
     const iterations = parseInt(parts[1], 10)
-    const salt = parts[2]
-    const expected = parts[3]
-    let hash = createHash('sha256')
-      .update(salt + password + ':pixelride')
-      .digest('hex')
-    for (let i = 0; i < iterations; i++) {
-      hash = createHash('sha256').update(hash).digest('hex')
-    }
-    const a = Buffer.from(hash, 'hex')
-    const b = Buffer.from(expected, 'hex')
-    if (a.length !== b.length) return false
-    return timingSafeEqual(a, b)
+    const salt = fromHex(parts[2])
+    const expected = fromHex(parts[3])
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(password),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveBits']
+    )
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+      keyMaterial,
+      256
+    )
+    const a = new Uint8Array(bits)
+    if (a.length !== expected.length) return false
+    return timingSafeEqual(a, expected)
   } catch {
     return false
   }
 }
-
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || 'pixel-ride-dev-secret-change-me-in-prod-9f2a7c'
 
 export interface SessionPayload {
   userId: string
@@ -57,7 +76,7 @@ export interface SessionPayload {
 
 export function createSession(user: { id: string; email: string; displayName: string }): string {
   const iat = Date.now()
-  const exp = iat + 1000 * 60 * 60 * 24 * 7 // 7 days
+  const exp = iat + 1000 * 60 * 60 * 24 * 7 // 7 天
   const payload: SessionPayload = { userId: user.id, email: user.email, displayName: user.displayName, iat, exp }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const sig = createHash('sha256').update(body + SESSION_SECRET).digest('base64url')

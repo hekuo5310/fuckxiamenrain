@@ -5,11 +5,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const limit = Math.min(50, Math.max(5, Number(searchParams.get('limit') || 20)))
 
-  const rows = await db.score.findMany({
-    orderBy: { score: 'desc' },
-    take: limit,
-    include: { user: { select: { displayName: true, email: true } } },
-  })
+  const rows = await db.score.findTopWithUser(limit)
 
   const leaderboard = rows.map((r, i) => ({
     rank: i + 1,
@@ -22,8 +18,8 @@ export async function GET(req: NextRequest) {
     umbrellaMs: r.umbrellaMs,
     crashes: r.crashes,
     createdAt: r.createdAt,
-    displayName: r.user.displayName,
-    emailHash: r.user.email,
+    displayName: r.displayName,
+    emailHash: r.email,
   }))
 
   return NextResponse.json({ leaderboard })
