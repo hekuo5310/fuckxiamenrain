@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, RefreshCw, ShieldCheck, MailOpen } from 'lucide-react'
+import { Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { AuthUser } from './AuthPanel'
 
 interface Props {
@@ -18,31 +18,6 @@ export function VerifyPanel({ user, onVerified }: Props) {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
-  const [latestCode, setLatestCode] = useState<string | null>(null)
-
-  // pull the latest mail so the user can autofill with one click (dev convenience)
-  const fetchLatestMail = useCallback(async () => {
-    try {
-      const res = await fetch('/api/devmail')
-      const data = await res.json()
-      const latest = data.mails?.[0]
-      if (latest) {
-        const m = latest.body.match(/(\d{6})/)
-        if (m) setLatestCode(m[1])
-      } else {
-        setLatestCode(null)
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
-  useEffect(() => {
-    const run = async () => { await fetchLatestMail() }
-    run()
-    const t = setInterval(() => { void fetchLatestMail() }, 3000)
-    return () => clearInterval(t)
-  }, [fetchLatestMail])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -68,8 +43,7 @@ export function VerifyPanel({ user, onVerified }: Props) {
     setResending(true)
     try {
       await fetch('/api/auth/login', { method: 'PUT' })
-      toast({ title: '已重新发送验证码' })
-      setTimeout(fetchLatestMail, 500)
+      toast({ title: '已重新发送验证码，请检查邮箱' })
     } finally {
       setResending(false)
     }
@@ -83,8 +57,7 @@ export function VerifyPanel({ user, onVerified }: Props) {
       </div>
       <p className="font-vt text-base text-muted-foreground mb-4 leading-tight">
         我们已向 <span className="text-foreground font-bold">{user.email}</span> 发送 6 位验证码。<br />
-        验证码 15 分钟内有效。<br />
-        <span className="text-[#d9a441]">收不到邮件？右侧「开发邮箱」面板可查看验证码。</span>
+        验证码 15 分钟内有效。
       </p>
       <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1">
@@ -101,15 +74,6 @@ export function VerifyPanel({ user, onVerified }: Props) {
             className="font-pixel text-lg tracking-[0.4em] text-center pixel-border-sm rounded-none bg-background"
           />
         </div>
-        {latestCode && (
-          <button
-            type="button"
-            onClick={() => setCode(latestCode)}
-            className="font-vt text-sm text-accent underline flex items-center gap-1"
-          >
-            <MailOpen className="w-3 h-3" /> 检测到开发邮箱验证码 {latestCode}（点击填入）
-          </button>
-        )}
         <Button
           type="submit"
           disabled={loading || code.length !== 6}
@@ -124,7 +88,7 @@ export function VerifyPanel({ user, onVerified }: Props) {
           disabled={resending}
           className="w-full font-vt text-sm h-auto py-2"
         >
-          {resending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+          {resending ? <Loader2 className="w-3 h-3 spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
           重新发送验证码
         </Button>
       </form>

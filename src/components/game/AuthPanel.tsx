@@ -47,7 +47,7 @@ export function AuthPanel({ onAuthed, onNeedVerify }: Props) {
       if (!res.ok) throw new Error(data.error || '注册失败')
       toast({
         title: '注册成功',
-        description: '验证码已发送，请到「开发邮箱」面板输入验证码完成验证。',
+        description: '验证码已发送到你的邮箱，请查收并输入验证码完成验证。',
       })
       onNeedVerify(data.user)
     } catch (err: any) {
@@ -149,8 +149,7 @@ export function AuthPanel({ onAuthed, onNeedVerify }: Props) {
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '注册并发送验证码'}
               </Button>
               <p className="font-vt text-sm text-muted-foreground text-center leading-tight">
-                注册后将通过 Cloudflare Email Send 发送验证码。<br />
-                沙箱环境请在右侧「开发邮箱」面板查收。
+                注册后将通过 Cloudflare Email Send 发送验证码到你的邮箱。
               </p>
             </form>
           </TabsContent>

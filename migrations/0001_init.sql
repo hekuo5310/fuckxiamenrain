@@ -46,14 +46,4 @@ CREATE TABLE IF NOT EXISTS VerificationCode (
 );
 CREATE INDEX IF NOT EXISTS idx_verifcode_email_purpose ON VerificationCode(email, purpose);
 
--- 开发邮箱表（沙箱投递落库；类似 KV 的邮箱）────────────────────────────────
-CREATE TABLE IF NOT EXISTS DevMail (
-  id        TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(12)))),
-  userId    TEXT,
-  toEmail   TEXT NOT NULL,
-  subject   TEXT NOT NULL,
-  body      TEXT NOT NULL,
-  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_devmail_userId ON DevMail(userId);
+-- 开发邮箱表已移除——全用 CF Email Send 发真邮件

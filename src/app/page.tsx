@@ -8,7 +8,6 @@ import { AuthPanel, type AuthUser } from '@/components/game/AuthPanel'
 import { VerifyPanel } from '@/components/game/VerifyPanel'
 import { PixelRideGame } from '@/components/game/PixelRideGame'
 import { Leaderboard } from '@/components/game/Leaderboard'
-import { DevMailbox } from '@/components/game/DevMailbox'
 
 type Screen = 'loading' | 'auth' | 'verify' | 'game'
 
@@ -122,7 +121,6 @@ export default function Home() {
             <div className="flex justify-center lg:justify-start">
               <VerifyPanel user={user} onVerified={onAuthed} />
             </div>
-            <DevMailbox />
           </div>
         )}
 
@@ -133,7 +131,6 @@ export default function Home() {
             </div>
             <div className="space-y-3">
               <Leaderboard refreshKey={lbKey} />
-              <DevMailbox />
             </div>
           </div>
         )}

@@ -1,32 +1,15 @@
 import { getEnv } from '@/lib/cloudflare'
-import { getPrisma } from '@/lib/db'
 
-// 邮件发送服务。
+// 邮件发送服务——只用 Cloudflare Email Send。
 //
-// 生产（Workers）：直接调用 CF Email Send 绑定的对象式 API：
+// 调用方式：
 //   await env.MAILER.send({ from, to, subject, text, html })
-// 这是 Cloudflare Workers 2024 年起新增的便捷 API，不需要 import
-// `cloudflare:email` 模块构造 EmailMessage，因此：
-//   1. esbuild 不会因为解析不到 cloudflare:email 报错
-//   2. Workers 不需要开 unsafe.eval 兼容性 flag
-//   3. 代码在 dev / prod 完全一致
 //
-// 本地 dev：miniflare 的 send_email binding 是 stub，不会真发信。
-// 我们在 dev 下绕过 binding，直接落 DevMail 表，可在「开发邮箱」面板查看。
+// 这是 CF Workers 2024 年起提供的对象式 API，由 @cloudflare/workers-types 原生支持。
+// 不需要 import cloudflare:email，也不需要 unsafe.eval。
 //
-// 类型参考 @cloudflare/workers-types 的 SendEmail 接口：
-//   send(builder: {
-//     from: string | EmailAddress
-//     to: string | EmailAddress | (string | EmailAddress)[]
-//     subject: string
-//     replyTo?: ...
-//     cc?: ...
-//     bcc?: ...
-//     headers?: Record<string, string>
-//     text?: string
-//     html?: string
-//     attachments?: EmailAttachment[]
-//   })
+// 本地 dev（wrangler dev）下 miniflare 的 send_email binding 是 stub，
+// send 调用会成功但不真发信。开发时验证码可在 wrangler 终端日志看到（console.log）。
 
 const FROM_FALLBACK = 'Pixel Ride <no-reply@pixelride.dev>'
 
@@ -40,88 +23,59 @@ interface SendEmailBuilder {
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 export async function sendEmail(opts: {
-  userId?: string | null
   toEmail: string
   subject: string
   body: string
 }): Promise<void> {
-  const isDev = process.env.NODE_ENV === 'development'
   const env = await getEnv()
   const from = env.FROM_EMAIL || FROM_FALLBACK
 
-  // dev：直接落 DevMail，跳过 CF 调用
-  if (isDev) {
-    return sendDevMail(opts)
+  if (!env.MAILER) {
+    console.warn('[mail] no MAILER binding, email not sent')
+    return
   }
 
-  // 生产：CF Email Send 对象式 API
-  // 重要：无论 send 是否"成功"，都同步落一份到 DevMail 表。
-  // 原因：wrangler.toml 的 destination_address 限制会让非目标地址的邮件
-  // 被 CF 静默拒绝或抛错；destination_address 模式下邮件只发到固定地址，
-  // 用户自己的邮箱根本收不到。落 DevMail 让用户总能从应用内
-  // 「开发邮箱」面板读到验证码，避免卡在 verify 界面。
-  if (env.MAILER) {
-    const builder: SendEmailBuilder = {
-      from,
-      to: opts.toEmail,
-      subject: opts.subject,
-      text: opts.body,
-      html: `<pre style="font:14px monospace;line-height:1.5;white-space:pre-wrap;">${escapeHtml(opts.body)}</pre>`,
-    }
-    try {
-      await (env.MAILER as unknown as {
-        send(b: SendEmailBuilder): Promise<unknown>
-      }).send(builder)
-    } catch (err) {
-      // send 抛错也要继续，确保 DevMail 落库
-      console.error('[mail] send threw, will still save DevMail:', err)
-    }
-  } else {
-    console.warn('[mail] no MAILER binding, only saving DevMail')
+  const builder: SendEmailBuilder = {
+    from,
+    to: opts.toEmail,
+    subject: opts.subject,
+    text: opts.body,
+    html: `<pre style="font:14px monospace;line-height:1.5;white-space:pre-wrap;">${escapeHtml(opts.body)}</pre>`,
   }
 
-  // 始终落一份到 DevMail，作为应用内可读的备份
-  return sendDevMail(opts)
-
-  async function sendDevMail(o: typeof opts) {
-    const prisma = await getPrisma()
-    await prisma.devMail.create({
-      data: {
-        userId: o.userId ?? null,
-        toEmail: o.toEmail,
-        subject: o.subject,
-        body: o.body,
-      },
-    })
-    console.log(`[mail] to=${o.toEmail} subject="${o.subject}"\n${o.body}\n---`)
+  try {
+    await (env.MAILER as unknown as {
+      send(b: SendEmailBuilder): Promise<unknown>
+    }).send(builder)
+    console.log(`[mail] sent to=${opts.toEmail} subject="${opts.subject}"`)
+  } catch (err) {
+    console.error('[mail] send failed:', err)
+    throw err
   }
 }
 
 export function generateCode(): string {
-  // 6 位数字验证码
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
 export async function issueVerificationCode(
   email: string,
-  purpose: string = 'register',
-  userId?: string | null
+  purpose: string = 'register'
 ) {
+  // 动态 import 避免循环依赖
+  const { getPrisma } = await import('@/lib/db')
   const prisma = await getPrisma()
-  // 作废该 email+purpose 之前未消费的验证码
+
   await prisma.verificationCode.updateMany({
     where: { email, purpose, consumed: false },
     data: { consumed: true },
   })
   const code = generateCode()
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 15) // 15 分钟
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 15)
   await prisma.verificationCode.create({
     data: { email, code, purpose, expiresAt },
   })
@@ -147,6 +101,6 @@ export async function issueVerificationCode(
     '- Pixel Ride Team',
   ].join('\n')
 
-  await sendEmail({ userId, toEmail: email, subject, body })
+  await sendEmail({ toEmail: email, subject, body })
   return code
 }

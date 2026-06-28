@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({
       ok: true,
       user: { id: user.id, email, displayName, verified: false },
-      message: '注册成功，验证码已发送到你的邮箱（开发环境请到"开发邮箱"面板查看）。',
+      message: '注册成功，验证码已发送到你的邮箱。',
     })
     res.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,

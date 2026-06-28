@@ -142,10 +142,14 @@ export class Game {
   private umbrella: boolean = true // start with umbrella up (core mechanic)
   private pedaling: boolean = false
   private braking: boolean = false
-  private speed: number = 0.45 // 0..1 normalized; ~1 = max
-  private readonly baseCruise = 0.45
+  private speed: number = 0.55 // 0..1 normalized; ~1 = max
+  private readonly baseCruise = 0.55
   private readonly maxSpeed = 1.0
-  private readonly minSpeed = 0.18
+  private readonly minSpeed = 0.25
+  // 同学追逐阈值：速度高于此值拉开同学，低于此值被追近。
+  // 必须低于 baseCruise * umbrellaPenalty (= 0.55 * 0.85 = 0.47)，
+  // 否则撑伞巡航也会被追上——那是 bug。
+  private readonly classmateThreshold = 0.35
 
   // stats
   private hp: number = 100
@@ -369,7 +373,7 @@ export class Game {
       umbrellaOn: this.umbrella,
       umbrellaMs: Math.round(this.umbrellaMs),
       speed: this.speed,
-      speedKmh: Math.round(this.speed * 32 + 4),
+      speedKmh: Math.round(this.speed * 25 + 5),
       classmateDist: this.classmateDist,
       crashes: this.crashes,
       phase: this.phase,
@@ -390,12 +394,16 @@ export class Game {
   }
 
   private spawn() {
+    // 最大同时存在实体数，防止路面上障碍物过密无法躲避
+    if (this.entities.filter(e => !e.dead && e.z > 0).length >= 6) return
+
     const difficulty = clamp(this.elapsed / 90, 0, 1) // ramps over 90s
     const r = Math.random()
     let type: Entity['type']
-    if (r < 0.32) type = 'snail'
-    else if (r < 0.6) type = 'pedestrian'
-    else if (r < 0.93) type = 'puddle'
+    // 降低挡路障碍物(蜗牛+行人)总比例，提高水坑(可撑伞挡)和咖啡(拾取)
+    if (r < 0.18) type = 'snail'
+    else if (r < 0.36) type = 'pedestrian'
+    else if (r < 0.80) type = 'puddle'
     else type = 'coin'
 
     const lane = choice([-1, 0, 1]) as Lane
@@ -429,8 +437,8 @@ export class Game {
 
     this.entities.push(e)
 
-    // sometimes spawn a second entity in a different lane for difficulty
-    if (difficulty > 0.4 && Math.random() < 0.25) {
+    // 高难度时有概率额外刷一个（降低概率避免太密）
+    if (difficulty > 0.6 && Math.random() < 0.12) {
       const lane2 = ([-1, 0, 1].filter((l) => l !== lane) as Lane[])[randInt(0, 1)]
       const t2 = choice(['snail', 'puddle']) as Entity['type']
       this.entities.push({
@@ -462,7 +470,7 @@ export class Game {
     this.rainIntensity += (this.rainTarget - this.rainIntensity) * dt * 0.5
 
     // --- input → speed ---
-    const umbPenalty = this.umbrella ? 0.8 : 1.0
+    const umbPenalty = this.umbrella ? 0.85 : 1.0
     const targetSpeed = this.braking
       ? this.minSpeed * 0.5
       : this.pedaling
@@ -478,7 +486,10 @@ export class Game {
     if (this.umbrella) this.umbrellaMs += dt * 1000
 
     // --- distance & scroll ---
-    const advance = this.speed * 28 * dt // m/s mapping
+    // 速度→km/h 映射: speed 0 = 5 km/h, speed 1 = 30 km/h
+    // 实际前进 m/s = km/h / 3.6，HUD 显示与距离计算用同一公式
+    const speedKmh = this.speed * 25 + 5
+    const advance = (speedKmh / 3.6) * dt // m/s
     this.distance += advance
     this.roadScroll += advance * 6
 
@@ -495,9 +506,7 @@ export class Game {
 
     // --- classmate chase ---
     // classmate gains when player slow / braking / umbrella, loses when fast
-    const lead = (this.speed - 0.4) * 0.06 // per second
-    let classmateDelta = -lead * dt
-    void classmateDelta
+    const lead = (this.speed - this.classmateThreshold) * 0.06 // per second
     this.classmateDist = clamp(this.classmateDist + (-lead * dt), 0, 1)
     if (this.classmateDist < 0.18 && Math.random() < dt * 0.5) {
       this.cb.onEvent({ type: 'classmate_close', text: '同学快追上来了！加速！', tone: 'warn' })
@@ -512,10 +521,11 @@ export class Game {
     // --- spawn ---
     this.spawnTimer -= dt
     const difficulty = clamp(this.elapsed / 60, 0, 1)
-    const spawnInterval = lerp(1.5, 0.55, difficulty)
+    // 刷怪间隔从 2s 渐降到 0.9s（原 1.5→0.55 太密）
+    const spawnInterval = lerp(2.0, 0.9, difficulty)
     if (this.spawnTimer <= 0) {
       this.spawn()
-      this.spawnTimer = spawnInterval * rand(0.7, 1.3)
+      this.spawnTimer = spawnInterval * rand(0.8, 1.4)
     }
 
     // --- entities ---
@@ -646,7 +656,7 @@ export class Game {
         } else {
           this.hp = clamp(this.hp - raw, 0, this.maxHp)
           this.spawnFloat(e, `-HP 溅水 ${Math.round(raw)}`, '#5a6b6b')
-          const speedKmh = Math.round(this.speed * 32 + 4)
+          const speedKmh = Math.round(this.speed * 25 + 5)
           this.cb.onEvent({ type: 'puddle_splash', text: `水坑溅水！速度${speedKmh}km/h × 水深${Math.round(e.depth * 100)}%`, tone: 'bad', lane: e.lane })
           this.dmgFlash = 300
           this.screenShake = 200
@@ -691,6 +701,16 @@ export class Game {
   }
 
   // ===================== RENDERING =====================
+
+  /** 世界水平偏移：玩家变道时整个世界反向移动，制造第一人称变道感 */
+  private get viewShiftX(): number {
+    return -this.laneX * 32
+  }
+
+  /** 玩家自身（车把/伞）的轻微偏移，方向同 laneX */
+  private get playerShiftX(): number {
+    return this.laneX * 6
+  }
 
   private render() {
     const ctx = this.ctx
@@ -778,13 +798,14 @@ export class Game {
 
   private drawRoad() {
     const ctx = this.ctx
+    const vx = this.viewShiftX
     // road trapezoid
     ctx.fillStyle = '#262019'
     ctx.beginPath()
     ctx.moveTo(0, H)
     ctx.lineTo(W, H)
-    ctx.lineTo(CENTER_X + 18, HORIZON)
-    ctx.lineTo(CENTER_X - 18, HORIZON)
+    ctx.lineTo(CENTER_X + vx + 18, HORIZON)
+    ctx.lineTo(CENTER_X + vx - 18, HORIZON)
     ctx.closePath()
     ctx.fill()
 
@@ -808,8 +829,8 @@ export class Game {
         const yNear = HORIZON + (GROUND_Y - HORIZON) * sNear
         const yFar = HORIZON + (GROUND_Y - HORIZON) * sFar
         if (yNear - yFar < 1) continue
-        const xNear = CENTER_X + laneEdge * 2 * LANE_NEAR_SPREAD * sNear
-        const xFar = CENTER_X + laneEdge * 2 * LANE_NEAR_SPREAD * sFar
+        const xNear = CENTER_X + vx + laneEdge * 2 * LANE_NEAR_SPREAD * sNear
+        const xFar = CENTER_X + vx + laneEdge * 2 * LANE_NEAR_SPREAD * sFar
         const wNear = Math.max(1, 3 * sNear)
         const wFar = Math.max(0.5, 3 * sFar)
         ctx.beginPath()
@@ -827,8 +848,8 @@ export class Game {
     for (const side of [-1, 1]) {
       ctx.beginPath()
       ctx.moveTo(side < 0 ? 0 : W, H)
-      ctx.lineTo(CENTER_X + side * 18, HORIZON)
-      ctx.lineTo(CENTER_X + side * 16, HORIZON)
+      ctx.lineTo(CENTER_X + vx + side * 18, HORIZON)
+      ctx.lineTo(CENTER_X + vx + side * 16, HORIZON)
       ctx.lineTo(side < 0 ? 8 : W - 8, H)
       ctx.closePath()
       ctx.fill()
@@ -837,6 +858,7 @@ export class Game {
 
   private drawSidewalks() {
     const ctx = this.ctx
+    const vx = this.viewShiftX
     // mossy green sidewalk strips beyond the curbs
     ctx.fillStyle = '#5a6f3e'
     ctx.fillRect(0, HORIZON, 14, H - HORIZON)
@@ -846,8 +868,8 @@ export class Game {
     for (let i = 0; i < 8; i++) {
       const sc = projectZ((i * 2 - (this.roadScroll * 0.5) % 16))
       const y2 = HORIZON + (GROUND_Y - HORIZON) * sc
-      this.pixelRect(3, y2, 3, 2)
-      this.pixelRect(W - 6, y2, 3, 2)
+      this.pixelRect(3 + vx * sc * 0.3, y2, 3, 2)
+      this.pixelRect(W - 6 + vx * sc * 0.3, y2, 3, 2)
     }
     // lamp posts scrolling on left side
     const lampCycle = 60
@@ -857,7 +879,7 @@ export class Game {
       if (z < 0.2 || z > 50) continue
       const sc = projectZ(z)
       const y = HORIZON + (GROUND_Y - HORIZON) * sc
-      const x = 10 * sc
+      const x = 10 * sc + vx * sc
       const lh = Math.max(4, Math.round(28 * sc))
       ctx.fillStyle = '#2b2118'
       this.pixelRect(Math.round(x), Math.round(y - lh), Math.max(1, Math.round(2 * sc)), lh)
@@ -872,12 +894,14 @@ export class Game {
     const sc = projectZ(Math.max(e.z, 0))
     if (sc <= 0.02) return
     const y = HORIZON + (GROUND_Y - HORIZON) * sc
+    // 远处的障碍物偏移幅度大（透视效果），近处偏移小
+    const vx = this.viewShiftX * sc
     let x: number
     if (e.type === 'pedestrian') {
       const pedX = lerp(e.fromLane, e.toLane, e.crossT)
-      x = CENTER_X + pedX * LANE_NEAR_SPREAD * 2 * sc
+      x = CENTER_X + vx + pedX * LANE_NEAR_SPREAD * 2 * sc
     } else {
-      x = CENTER_X + e.lane * LANE_NEAR_SPREAD * 2 * sc
+      x = CENTER_X + vx + e.lane * LANE_NEAR_SPREAD * 2 * sc
     }
     x = Math.round(x)
     const yy = Math.round(y)
@@ -955,17 +979,18 @@ export class Game {
 
   private drawPlayer() {
     const ctx = this.ctx
+    const px = Math.round(this.playerShiftX)
     ctx.fillStyle = '#2b2118'
-    ctx.fillRect(40, H - 18, 26, 4)
-    ctx.fillRect(38, H - 22, 6, 6)
-    ctx.fillRect(W - 66, H - 18, 26, 4)
-    ctx.fillRect(W - 44, H - 22, 6, 6)
-    ctx.fillRect(CENTER_X - 2, H - 22, 4, 8)
+    ctx.fillRect(40 + px, H - 18, 26, 4)
+    ctx.fillRect(38 + px, H - 22, 6, 6)
+    ctx.fillRect(W - 66 + px, H - 18, 26, 4)
+    ctx.fillRect(W - 44 + px, H - 22, 6, 6)
+    ctx.fillRect(CENTER_X - 2 + px, H - 22, 4, 8)
     ctx.fillStyle = '#d9a441'
-    ctx.fillRect(W - 50, H - 24, 4, 3)
+    ctx.fillRect(W - 50 + px, H - 24, 4, 3)
     ctx.fillStyle = '#d9a441'
-    ctx.fillRect(40, H - 16, 6, 4)
-    ctx.fillRect(W - 46, H - 16, 6, 4)
+    ctx.fillRect(40 + px, H - 16, 6, 4)
+    ctx.fillRect(W - 46 + px, H - 16, 6, 4)
 
     if (this.umbrella) {
       const bob = Math.round(this.umbrellaBob)
@@ -973,27 +998,27 @@ export class Game {
       for (let i = 0; i < 14; i++) {
         const w = 180 - i * 10
         if (w <= 0) break
-        ctx.fillRect(CENTER_X - w / 2, 6 + i + bob, w, 1)
+        ctx.fillRect(CENTER_X - w / 2 + px, 6 + i + bob, w, 1)
       }
       ctx.fillStyle = '#8a2e0a'
       for (let i = 0; i < 7; i++) {
         const x = CENTER_X - 80 + i * 26
-        ctx.fillRect(x, 8 + bob, 1, 14)
+        ctx.fillRect(x + px, 8 + bob, 1, 14)
       }
       ctx.fillStyle = '#d9a441'
-      ctx.fillRect(CENTER_X, 4 + bob, 2, 3)
+      ctx.fillRect(CENTER_X + px, 4 + bob, 2, 3)
       ctx.fillStyle = '#2b2118'
-      ctx.fillRect(CENTER_X, 20 + bob, 2, H - 40 - bob)
+      ctx.fillRect(CENTER_X + px, 20 + bob, 2, H - 40 - bob)
     } else {
       ctx.fillStyle = '#c1440e'
-      ctx.fillRect(CENTER_X - 10, H - 30, 20, 3)
+      ctx.fillRect(CENTER_X - 10 + px, H - 30, 20, 3)
       ctx.fillStyle = '#2b2118'
-      ctx.fillRect(CENTER_X - 10, H - 28, 20, 1)
+      ctx.fillRect(CENTER_X - 10 + px, H - 28, 20, 1)
     }
 
     ctx.fillStyle = '#6b5638'
-    ctx.fillRect(CENTER_X - 14, H - 8, 4, 8)
-    ctx.fillRect(CENTER_X + 10, H - 8, 4, 8)
+    ctx.fillRect(CENTER_X - 14 + px, H - 8, 4, 8)
+    ctx.fillRect(CENTER_X + 10 + px, H - 8, 4, 8)
   }
 
   private drawRain() {

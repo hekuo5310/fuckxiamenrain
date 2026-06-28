@@ -28,7 +28,6 @@ model User {
   updatedAt    DateTime @updatedAt
 
   scores       Score[]
-  devMails     DevMail[]
 }
 
 model Score {
@@ -58,14 +57,4 @@ model VerificationCode {
   createdAt DateTime @default(now())
 
   @@index([email, purpose])
-}
-
-model DevMail {
-  id        String   @id @default(cuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  toEmail   String
-  subject   String
-  body      String
-  createdAt DateTime @default(now())
 }
