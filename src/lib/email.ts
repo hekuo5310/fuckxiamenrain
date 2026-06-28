@@ -62,6 +62,11 @@ export async function sendEmail(opts: {
   }
 
   // 生产：CF Email Send 对象式 API
+  // 重要：无论 send 是否"成功"，都同步落一份到 DevMail 表。
+  // 原因：wrangler.toml 的 destination_address 限制会让非目标地址的邮件
+  // 被 CF 静默拒绝或抛错；destination_address 模式下邮件只发到固定地址，
+  // 用户自己的邮箱根本收不到。落 DevMail 让用户总能从应用内
+  // 「开发邮箱」面板读到验证码，避免卡在 verify 界面。
   if (env.MAILER) {
     const builder: SendEmailBuilder = {
       from,
@@ -74,15 +79,15 @@ export async function sendEmail(opts: {
       await (env.MAILER as unknown as {
         send(b: SendEmailBuilder): Promise<unknown>
       }).send(builder)
-      return
     } catch (err) {
-      // 对象式 API 在某些 workerd 版本下可能未启用，回退 DevMail 便于排查
-      console.error('[mail] send failed, falling back to DevMail:', err)
-      return sendDevMail(opts)
+      // send 抛错也要继续，确保 DevMail 落库
+      console.error('[mail] send threw, will still save DevMail:', err)
     }
+  } else {
+    console.warn('[mail] no MAILER binding, only saving DevMail')
   }
 
-  // 兜底：没有 MAILER 绑定，落 DevMail 便于排查
+  // 始终落一份到 DevMail，作为应用内可读的备份
   return sendDevMail(opts)
 
   async function sendDevMail(o: typeof opts) {

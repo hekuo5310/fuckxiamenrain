@@ -83,7 +83,8 @@ export function VerifyPanel({ user, onVerified }: Props) {
       </div>
       <p className="font-vt text-base text-muted-foreground mb-4 leading-tight">
         我们已向 <span className="text-foreground font-bold">{user.email}</span> 发送 6 位验证码。<br />
-        验证码 15 分钟内有效。
+        验证码 15 分钟内有效。<br />
+        <span className="text-[#d9a441]">收不到邮件？右侧「开发邮箱」面板可查看验证码。</span>
       </p>
       <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1">

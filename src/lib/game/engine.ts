@@ -218,19 +218,26 @@ export class Game {
   }
 
   private onKey(e: KeyboardEvent, down: boolean) {
-    const k = e.key.toLowerCase()
-    const watched = [
-      'arrowleft', 'arrowright', 'arrowup', 'arrowdown',
-      'a', 'd', 'w', 's', ' ', 'p', 'enter',
-    ]
-    if (watched.includes(k)) {
-      e.preventDefault()
-      this.keys[k] = down
-      if (down) this.handleAction(k)
-      else {
-        if (k === 'arrowup' || k === 'w') this.pedaling = false
-        if (k === 'arrowdown' || k === 's') this.braking = false
-      }
+    // 优先用 e.code（物理键位），fallback 到 e.key。
+    // 某些 IME / 键盘布局下 e.key 可能给出非预期字符，
+    // 但 e.code 对方向键和空格始终稳定（ArrowLeft / ArrowRight / Space 等）。
+    const code = (e.code || '').toLowerCase()
+    const key = (e.key || '').toLowerCase()
+    const map: Record<string, string> = {
+      arrowleft: 'arrowleft', arrowright: 'arrowright',
+      arrowup: 'arrowup', arrowdown: 'arrowdown',
+      keya: 'a', keyd: 'd', keyw: 'w', keys: 's',
+      space: ' ', keyp: 'p', enter: 'enter',
+    }
+    // 用 code 解析出统一 token，再用 key 兜底
+    const k = map[code] || (['arrowleft','arrowright','arrowup','arrowdown','a','d','w','s',' ','p','enter'].includes(key) ? key : '')
+    if (!k) return
+    e.preventDefault()
+    this.keys[k] = down
+    if (down) this.handleAction(k)
+    else {
+      if (k === 'arrowup' || k === 'w') this.pedaling = false
+      if (k === 'arrowdown' || k === 's') this.braking = false
     }
   }
 

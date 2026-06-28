@@ -64,7 +64,11 @@ export function PixelRideGame({ user, onScoreSubmitted }: Props) {
     return () => game.destroy()
   }, [])
 
-  function handleStart() {
+  function handleStart(e?: React.SyntheticEvent) {
+    // 关键：点击"开始骑行"/"再来一次"后立刻 blur 按钮。
+    // 否则按钮保留 focus，用户按空格(撑伞)时浏览器会先触发按钮 click →
+    // 重新调用 start() → 游戏状态被重置 → 玩家以为"按键控制不了"。
+    if (e && e.currentTarget instanceof HTMLElement) e.currentTarget.blur()
     setResult(null)
     setSubmitted(false)
     setEvents([])
@@ -228,12 +232,13 @@ export function PixelRideGame({ user, onScoreSubmitted }: Props) {
             </p>
             <Button
               onClick={handleStart}
+              autoFocus
               className="pixel-btn rounded-none bg-primary text-primary-foreground hover:bg-primary/90 h-auto py-3 px-6 font-pixel text-[10px]"
             >
               <Play className="w-3 h-3 mr-1" /> 开始骑行
             </Button>
             <p className="font-vt text-[10px] text-[#b9a888] mt-4 leading-tight">
-              ←/A →/D 变道 · ↑/W 踩踏 · ↓/S 刹车 · 空格 撑伞 · P 暂停
+              按 Enter 开始 · ←/A →/D 变道 · ↑/W 踩踏 · ↓/S 刹车 · 空格 撑伞 · P 暂停
             </p>
           </div>
         )}
