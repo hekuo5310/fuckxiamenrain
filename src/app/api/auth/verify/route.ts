@@ -36,11 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '验证码不正确' }, { status: 400 })
   }
 
-  // 原子：消费验证码 + 标记用户已验证
-  await prisma.$transaction([
-    prisma.verificationCode.update({ where: { id: record.id }, data: { consumed: true } }),
-    prisma.user.update({ where: { id: session.userId }, data: { verified: true } }),
-  ])
+  // D1 不支持事务，分两步执行：消费验证码 + 标记用户已验证
+  await prisma.verificationCode.update({ where: { id: record.id }, data: { consumed: true } })
+  await prisma.user.update({ where: { id: session.userId }, data: { verified: true } })
 
   const user = await prisma.user.findUnique({ where: { id: session.userId } })
   return NextResponse.json({
