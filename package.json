@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "build:worker": "prisma generate && npx @opennextjs/cloudflare build",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "db:generate": "prisma generate",

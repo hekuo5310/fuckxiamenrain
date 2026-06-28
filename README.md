@@ -140,6 +140,25 @@ npm run cf:tail               # 实时日志
 
 本地 dev 不发真信，验证码落 DevMail 表供「开发邮箱」面板查看。
 
+### 自动部署（Cloudflare Workers Builds）
+
+用 Cloudflare Workers 内置 Git 集成（Workers Builds）：push 到 `main` 自动构建部署 Worker。在 Workers 项目 → Settings → Builds 里配：
+
+- **Build command**: `bun run build:worker`（= `prisma generate && npx @opennextjs/cloudflare build`，产 `.open-next/worker.js`）
+- **Deploy command**: `npx wrangler deploy`
+
+> 不要用 `bun run build`（= `next build`）—— 那产 `.next/standalone`，不是 OpenNext Worker，wrangler deploy 会找不到 `main` 文件。
+
+Workers Builds 会自动注入 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 给 build 环境，无需手动配 secret。
+
+`SESSION_SECRET` 经 `wrangler secret put SESSION_SECRET` 注入一次（本地或 dashboard），不在仓库。
+
+首次部署前先本地手动建表：
+
+```bash
+npm run d1:migrate:remote        # 远程 D1 建表
+```
+
 ## 部署就绪状态
 
 D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本地 dev 与生产同源代码：
