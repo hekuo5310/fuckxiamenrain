@@ -2,8 +2,8 @@ import { getEnv } from '@/lib/cloudflare'
 import { getPrisma } from '@/lib/db'
 
 // 邮件发送服务。
-// 生产：直接调用 CF Email Send 绑定 env.MAILER.send(EmailMessage)，
-//       MIME 由 mimetext 构造（需装 mimetext 依赖）。
+// 生产：直接调用 CF Email Send 绑定 env.MAILER.send({ to, from, subject, text })，
+//       对象式 API（Cloudflare 新版 Email Send），无需 import 任何模块。
 // 本地 dev：miniflare 不实际发信，验证码落 DevMail 表，可在「开发邮箱」面板查看，
 //           保证注册 + 验证流程端到端可玩。
 
@@ -20,15 +20,13 @@ export async function sendEmail(opts: {
   const from = env.FROM_EMAIL || FROM_FALLBACK
 
   if (!isDev && env.MAILER) {
-    // 生产：CF Email Send 直接调用
-    const { EmailMessage } = await import('cloudflare:email')
-    const { createMimeMessage } = await import('mimetext')
-    const msg = createMimeMessage()
-    msg.setSender(from)
-    msg.setRecipient(opts.toEmail)
-    msg.setSubject(opts.subject)
-    msg.addMessage({ contentType: 'text/plain', data: opts.body })
-    await env.MAILER.send(new EmailMessage(from, opts.toEmail, msg))
+    // 生产：CF Email Send 对象式 API，直接调用
+    await env.MAILER.send({
+      to: opts.toEmail,
+      from,
+      subject: opts.subject,
+      text: opts.body,
+    })
     return
   }
 
