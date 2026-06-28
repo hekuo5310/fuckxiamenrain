@@ -19,6 +19,9 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     // React rules
     "react-hooks/exhaustive-deps": "off",
     "react-hooks/purity": "off",
+    // shadcn/embla 生成代码在 effect 里同步 setState（如 carousel onSelect、useIsMobile 初始化），
+    // 属框架推荐模式，非业务 bug，关掉这条性能规则避免阻塞 build。
+    "react-hooks/set-state-in-effect": "off",
     "react/no-unescaped-entities": "off",
     "react/display-name": "off",
     "react/prop-types": "off",
