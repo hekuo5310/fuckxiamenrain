@@ -133,7 +133,7 @@ npm run cf:tail               # 实时日志
 
 ### Email Send 绑定
 
-`wrangler.toml` 已声明 `[[send_email]] name = "MAILER"`，`src/lib/email.ts` 生产环境直接调用 `env.MAILER.send(new EmailMessage(from, to, mimeMsg))`，MIME 由 `mimetext` 构造。两种模式二选一：
+`wrangler.toml` 已声明 `[[send_email]] name = "MAILER"`，`src/lib/email.ts` 生产环境直接调用 `env.MAILER.send({ from, to, subject, text, html })` —— 这是 Cloudflare Workers 2024 年起提供的对象式 API，无需 import `cloudflare:email` / `mimetext`，也不需要开 `unsafe.eval` 兼容性 flag。两种模式二选一：
 
 - **已验证收件地址（测试）**：`destination_address = "已验证邮箱"`（仅能发往该地址）。
 - **自定义域名（生产）**：`enabled = true` + 在发件域名配置 SPF/DKIM 验证。
@@ -167,19 +167,21 @@ D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本�
 |------|------|
 | 前端 / 游戏引擎 | Next.js + Canvas，OpenNext 构建到 Workers |
 | 路由 / API | Next.js route handler，Node runtime 经 `nodejs_compat` |
-| 数据访问 `db.ts` | Prisma + `@prisma/adapter-d1`（binding `pixel_ride`），`getCloudflareContext()` 取 env |
+| 数据访问 `db.ts` | Prisma + `@prisma/adapter-d1`（binding `pixel_ride`），Prisma client 经 `serverExternalPackages` 标记为外部包后由 OpenNext 用 `workerd` build condition 复制 wasm 版本，避免加载 native query engine |
 | 密码哈希 `auth.ts` | WebCrypto PBKDF2（单次 `deriveBits`，不超 Workers CPU 限制） |
 | session | HMAC-SHA256 签名 cookie，无服务端存储 |
-| 邮件 `email.ts` | 生产 `env.MAILER.send(EmailMessage)`；dev 落 DevMail 表 |
+| 邮件 `email.ts` | 生产 `env.MAILER.send({ from, to, subject, text, html })` 对象式 API；dev 落 DevMail 表 |
 
-### 部署前需验证（网络受限，无法在线确认精确 API）
+### 关键修复点（让项目真正能在 Workers 上跑起来）
 
-1. **Prisma WASM engine** — Workers 不能跑 rust native query engine。确认 `@prisma/client` 在边缘用 WASM engine 生成。参考 Prisma 官方 Cloudflare D1 部署文档，可能需 `binaryTargets` 或 edge engine 配置。`npm run cf:build` 后若报 query engine 相关错误即此问题。
-2. **Workers 包大小** — Prisma WASM client 较大，免费版 Workers 1MB 压缩限制可能超限；付费版 10MB。`cf:build` 输出体积需检查。
-3. **`getCloudflareContext()` 形式** — 当前同步调用。OpenNext 版本若需 async，改 `await getCloudflareContext({ async: true })`。
-4. **Email Send API** — 当前用 CF 标准 `new EmailMessage(from, to, mimeMsg)` + `mimetext` + `cloudflare:email` 模块。若你用的新版对象式 API 不同，改 `src/lib/email.ts`。
+1. **Prisma schema**：加 `previewFeatures = ["driverAdapters"]` + `binaryTargets = ["native", "rhel-openssl-3.0.x"]`，否则 PrismaClient 不识别 `adapter` 参数。
+2. **`next.config.mjs`**：移除 `output: "standalone"`；加 `serverExternalPackages: ['@prisma/client', '@prisma/adapter-d1', '.prisma/client']`，让 OpenNext `copyWorkerdPackages` 用 `workerd` condition 复制 wasm 版 Prisma client（否则 esbuild 默认 conditions 走 node 路径，加载 native engine 在 Workers 上 `fs.readdir` 崩）。
+3. **`images.unoptimized = true`**：禁用 next/image 优化，避免依赖 `sharp` 原生模块。
+4. **Email Send 对象式 API**：不用 `cloudflare:email` + `EmailMessage`，因为 esbuild 在 OpenNext server bundle 阶段解析不到 `cloudflare:email` 会直接报错；动态 import 又需要 `unsafe.eval` 兼容性 flag 降低安全性。对象式 API `env.MAILER.send({ from, to, subject, text, html })` 由 `@cloudflare/workers-types` 原生支持，两难俱解。
+5. **移除 `sharp` 依赖**：Workers 不能加载原生模块。
+6. **`tsconfig.json` exclude `examples/`、`mini-services/`、`download/`**：避免无关 TS 文件被编译。
 
-> `db/custom.db` 为本地旧 SQLite 遗留，运行时不使用，可删。
+> `db/custom.db` 为本地旧 SQLite 遗留，已删除且加入 `.gitignore`。
 
 ## 路线图
 

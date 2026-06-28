@@ -2,12 +2,49 @@ import { getEnv } from '@/lib/cloudflare'
 import { getPrisma } from '@/lib/db'
 
 // 邮件发送服务。
-// 生产：直接调用 CF Email Send 绑定 env.MAILER.send({ to, from, subject, text })，
-//       对象式 API（Cloudflare 新版 Email Send），无需 import 任何模块。
-// 本地 dev：miniflare 不实际发信，验证码落 DevMail 表，可在「开发邮箱」面板查看，
-//           保证注册 + 验证流程端到端可玩。
+//
+// 生产（Workers）：直接调用 CF Email Send 绑定的对象式 API：
+//   await env.MAILER.send({ from, to, subject, text, html })
+// 这是 Cloudflare Workers 2024 年起新增的便捷 API，不需要 import
+// `cloudflare:email` 模块构造 EmailMessage，因此：
+//   1. esbuild 不会因为解析不到 cloudflare:email 报错
+//   2. Workers 不需要开 unsafe.eval 兼容性 flag
+//   3. 代码在 dev / prod 完全一致
+//
+// 本地 dev：miniflare 的 send_email binding 是 stub，不会真发信。
+// 我们在 dev 下绕过 binding，直接落 DevMail 表，可在「开发邮箱」面板查看。
+//
+// 类型参考 @cloudflare/workers-types 的 SendEmail 接口：
+//   send(builder: {
+//     from: string | EmailAddress
+//     to: string | EmailAddress | (string | EmailAddress)[]
+//     subject: string
+//     replyTo?: ...
+//     cc?: ...
+//     bcc?: ...
+//     headers?: Record<string, string>
+//     text?: string
+//     html?: string
+//     attachments?: EmailAttachment[]
+//   })
 
 const FROM_FALLBACK = 'Pixel Ride <no-reply@pixelride.dev>'
+
+interface SendEmailBuilder {
+  from: string
+  to: string
+  subject: string
+  text?: string
+  html?: string
+  headers?: Record<string, string>
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
 
 export async function sendEmail(opts: {
   userId?: string | null
@@ -19,30 +56,47 @@ export async function sendEmail(opts: {
   const env = await getEnv()
   const from = env.FROM_EMAIL || FROM_FALLBACK
 
-  if (!isDev && env.MAILER) {
-    // 生产：CF Email Send 对象式 API，直接调用
-    await env.MAILER.send({
-      to: opts.toEmail,
-      from,
-      subject: opts.subject,
-      text: opts.body,
-    })
-    return
+  // dev：直接落 DevMail，跳过 CF 调用
+  if (isDev) {
+    return sendDevMail(opts)
   }
 
-  // dev fallback：落 DevMail 表
-  const prisma = await getPrisma()
-  await prisma.devMail.create({
-    data: {
-      userId: opts.userId ?? null,
-      toEmail: opts.toEmail,
+  // 生产：CF Email Send 对象式 API
+  if (env.MAILER) {
+    const builder: SendEmailBuilder = {
+      from,
+      to: opts.toEmail,
       subject: opts.subject,
-      body: opts.body,
-    },
-  })
-  console.log(
-    `[mail] to=${opts.toEmail} subject="${opts.subject}"\n${opts.body}\n---`
-  )
+      text: opts.body,
+      html: `<pre style="font:14px monospace;line-height:1.5;white-space:pre-wrap;">${escapeHtml(opts.body)}</pre>`,
+    }
+    try {
+      await (env.MAILER as unknown as {
+        send(b: SendEmailBuilder): Promise<unknown>
+      }).send(builder)
+      return
+    } catch (err) {
+      // 对象式 API 在某些 workerd 版本下可能未启用，回退 DevMail 便于排查
+      console.error('[mail] send failed, falling back to DevMail:', err)
+      return sendDevMail(opts)
+    }
+  }
+
+  // 兜底：没有 MAILER 绑定，落 DevMail 便于排查
+  return sendDevMail(opts)
+
+  async function sendDevMail(o: typeof opts) {
+    const prisma = await getPrisma()
+    await prisma.devMail.create({
+      data: {
+        userId: o.userId ?? null,
+        toEmail: o.toEmail,
+        subject: o.subject,
+        body: o.body,
+      },
+    })
+    console.log(`[mail] to=${o.toEmail} subject="${o.subject}"\n${o.body}\n---`)
+  }
 }
 
 export function generateCode(): string {

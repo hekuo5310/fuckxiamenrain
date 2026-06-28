@@ -1,17 +1,26 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 
-// Workers 绑定类型。依赖 `wrangler types`（npm run cf:types）生成的
-// worker-configuration.d.ts 提供全局 D1Database / KVNamespace / SendEmail 类型。
+// Workers 绑定类型。
+// D1Database / KVNamespace 是 @cloudflare/workers-types 提供的全局类型。
+// SendEmail 在不同版本的 workers-types 中定义不一致，这里用一个最小结构
+// 兜底，避免在未生成 worker-configuration.d.ts 时编译报错。
+// 真实类型由 `npm run cf:types`（wrangler types）注入到全局。
+export interface SendEmailBinding {
+  send(message: unknown): Promise<void>
+}
+
 export interface Env {
   /** D1 数据库，binding 名对应 wrangler.toml [[d1_databases]] binding */
   pixel_ride: D1Database
-  /** CF Email Send 绑定 */
-  MAILER: SendEmail
+  /** CF Email Send 绑定（生产环境必须，dev 可选） */
+  MAILER?: SendEmailBinding
   /** KV（预留：限流 / session 缓存） */
-  SESSION_KV: KVNamespace
+  SESSION_KV?: KVNamespace
   APP_NAME: string
   APP_TAGLINE: string
   FROM_EMAIL: string
+  /** session HMAC 密钥，经 `wrangler secret put SESSION_SECRET` 注入 */
+  SESSION_SECRET?: string
 }
 
 /**

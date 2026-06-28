@@ -2,7 +2,15 @@
 // Database schema (mirrors a Cloudflare D1 structure: User / Score / VerificationCode / DevMail)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // driverAdapters 是 @prisma/adapter-d1 的前置开关，缺它 PrismaClient
+  // 不会识别 adapter 参数，所有 D1 调用都会抛 "Unknown arg `adapter`"。
+  previewFeatures = ["driverAdapters"]
+  // 默认 native binary 在 Workers 上无法加载（无 fs/原生 rust engine），
+  // 加 rhel-openssl-3.0.x 让 prisma generate 产出可在 Linux CI 构建产物
+  // 中使用的 client；真正在 Workers 运行时由 @prisma/adapter-d1 接管 SQL
+  // 编译，不需要 query engine binary。
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

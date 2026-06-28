@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -41,6 +42,10 @@ yarn-error.log*
 .open-next/
 .wrangler/
 worker-configuration.d.ts
+
+# prisma local artifacts
+db/
+prisma/migrations/dev.db*
 
 
 # typescript

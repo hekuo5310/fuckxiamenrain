@@ -4,7 +4,7 @@
 # Next.js 16 App Router 通过 @opennextjs/cloudflare 跑在 Workers 上，
 # 把 `next build` 产物编译成单个 Worker（.open-next/worker.js）。
 #
-# 构建：   npm run cf:build        # opennextjs-cloudflare build
+# 构建：   npm run cf:build        # prisma generate && opennextjs-cloudflare build
 # 部署：   npm run cf:deploy       # wrangler deploy
 # 本地：   npm run cf:dev          # wrangler dev（从 .dev.vars 读取密钥）
 #
@@ -12,8 +12,13 @@
 #   wrangler login
 #   wrangler d1 create pixel-ride            # 把返回的 database_id 填到下方
 #   wrangler d1 migrations apply pixel-ride --remote
-#   wrangler secret put SESSION_SECRET       # 32+ 位随机串
-#   wrangler email send ...                  # 或在下方设置 destination_address
+#   wrangler secret put SESSION_SECRET       # 32+ 位随机串：openssl rand -hex 32
+#
+# Email Send：
+#   - 模式 A（测试）：destination_address 填一个"已验证收件邮箱"
+#     Worker 只能把信发到这个地址（适合自测注册流程）。
+#   - 模式 B（生产）：enabled = true + 在发件域名配 SPF/DKIM，可发任意收件人。
+#   两者二选一；当前默认 A。
 # ──────────────────────────────────────────────────────────────────────────
 
 name = "pixel-ride"
@@ -30,7 +35,7 @@ binding = "ASSETS"
 [vars]
 APP_NAME = "Pixel Ride"
 APP_TAGLINE = "雨中骑车上学路"
-FROM_EMAIL = "noreply@d-dos.cc"
+FROM_EMAIL = "Pixel Ride <noreply@d-dos.cc>"
 
 # ── D1 数据库 ──────────────────────────────────────────────────────────────
 # 创建：wrangler d1 create pixel-ride
@@ -40,16 +45,21 @@ binding = "pixel_ride"
 database_name = "pixel-ride"
 database_id = "891c315a-9b2f-40f3-8bf9-1bb9bde85ebd"
 
-# ── Email Send（Workers 经 MailChannels 发信）──────────────────────────────
-# Worker 调用：await env.MAILER.send({ from, to, subject, text })
-# 两种模式二选一：
-#   1. 已验证收件地址（沙箱/测试）：设置 destination_address
-#   2. 自定义域名（生产）：enabled = true + 在域名配置 SPF/DKIM 验证
-# 文档：https://developers.cloudflare.com/workers/runtime-apis/send-email/
+# ── Email Send（Workers 发信）──────────────────────────────────────────────
+# Worker 调用：
+#   import { EmailMessage } from 'cloudflare:email'
+#   const msg = new EmailMessage(from, to, mime)
+#   await env.MAILER.send(msg)
+#
+# 模式 A（默认，仅发到固定地址）：
+#   把 destination_address 改成"你已在 CF 后台验证过的收件邮箱"。
+# 模式 B（生产，可发任意人）：
+#   注释掉 destination_address，启用 enabled = true，
+#   并在 CF 控制台为发件域名配置 SPF/DKIM。
 [[send_email]]
 name = "MAILER"
-destination_address = "noreply@d-dos.cc"   # 模式 1
-# enabled = true                                              # 模式 2
+destination_address = "noreply@d-dos.cc"
+# enabled = true
 
 # ── KV 命名空间（可选，未来用途：限流 / session 缓存）──────────────────────
 # 创建：wrangler kv namespace create SESSION_KV
@@ -60,4 +70,3 @@ id = "3310325f98f34cf6adab079b164f0c08"
 # ── 可观测性 ───────────────────────────────────────────────────────────────
 [observability]
 enabled = true
-
