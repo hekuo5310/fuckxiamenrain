@@ -144,10 +144,10 @@ npm run cf:tail               # 实时日志
 
 用 Cloudflare Workers 内置 Git 集成（Workers Builds）：push 到 `main` 自动构建部署 Worker。在 Workers 项目 → Settings → Builds 里配：
 
-- **Build command**: `bun run build:worker`（= `prisma generate && opennextjs-cloudflare build`，产 `.open-next/worker.js`）
+- **Build command**: `npm run build:worker`（= `prisma generate && opennextjs-cloudflare build`，产 `.open-next/worker.js`）
 - **Deploy command**: `npx wrangler deploy`
 
-> 不要用 `bun run build`（= `next build`）—— 那产 `.next/standalone`，不是 OpenNext Worker，wrangler deploy 会找不到 `main` 文件。
+> 不要用 `npm run build`（= `next build`）—— 那产 `.next/standalone`，不是 OpenNext Worker，wrangler deploy 会找不到 `main` 文件。
 
 Workers Builds 会自动注入 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 给 build 环境，无需手动配 secret。
 

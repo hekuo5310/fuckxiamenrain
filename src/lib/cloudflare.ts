@@ -1,6 +1,6 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 
-// Workers 绑定类型。依赖 `wrangler types`（bun run cf:types）生成的
+// Workers 绑定类型。依赖 `wrangler types`（npm run cf:types）生成的
 // worker-configuration.d.ts 提供全局 D1Database / KVNamespace / SendEmail 类型；
 // 或安装 @cloudflare/workers-types 兜底。
 export interface Env {

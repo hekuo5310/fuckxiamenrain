@@ -4,9 +4,9 @@
 # Next.js 16 App Router 通过 @opennextjs/cloudflare 跑在 Workers 上，
 # 把 `next build` 产物编译成单个 Worker（.open-next/worker.js）。
 #
-# 构建：   bun run cf:build        # npx @opennextjs/cloudflare build
-# 部署：   bun run cf:deploy       # wrangler deploy
-# 本地：   bun run cf:dev          # wrangler dev（从 .dev.vars 读取密钥）
+# 构建：   npm run cf:build        # opennextjs-cloudflare build
+# 部署：   npm run cf:deploy       # wrangler deploy
+# 本地：   npm run cf:dev          # wrangler dev（从 .dev.vars 读取密钥）
 #
 # 首次设置：
 #   wrangler login
