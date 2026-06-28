@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "build:worker": "prisma generate && npx @opennextjs/cloudflare build",
+    "build:worker": "prisma generate && opennextjs-cloudflare build",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "db:generate": "prisma generate",
@@ -13,7 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
-    "cf:build": "npx @opennextjs/cloudflare build",
+    "cf:build": "opennextjs-cloudflare build",
     "cf:dev": "wrangler dev",
     "cf:deploy": "wrangler deploy",
     "cf:deploy:prod": "wrangler deploy --env production",

@@ -2,8 +2,7 @@
 // Database schema (mirrors a Cloudflare D1 structure: User / Score / VerificationCode / DevMail)
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
