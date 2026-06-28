@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const limit = Math.min(50, Math.max(5, Number(searchParams.get('limit') || 20)))
 
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const rows = await prisma.score.findMany({
     orderBy: { score: 'desc' },
     take: limit,

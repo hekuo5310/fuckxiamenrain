@@ -16,7 +16,7 @@ export async function sendEmail(opts: {
   body: string
 }): Promise<void> {
   const isDev = process.env.NODE_ENV === 'development'
-  const env = getEnv()
+  const env = await getEnv()
   const from = env.FROM_EMAIL || FROM_FALLBACK
 
   if (!isDev && env.MAILER) {
@@ -31,7 +31,7 @@ export async function sendEmail(opts: {
   }
 
   // dev fallback：落 DevMail 表
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   await prisma.devMail.create({
     data: {
       userId: opts.userId ?? null,
@@ -55,7 +55,7 @@ export async function issueVerificationCode(
   purpose: string = 'register',
   userId?: string | null
 ) {
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   // 作废该 email+purpose 之前未消费的验证码
   await prisma.verificationCode.updateMany({
     where: { email, purpose, consumed: false },

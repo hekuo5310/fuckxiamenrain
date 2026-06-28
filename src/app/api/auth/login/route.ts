@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '请填写邮箱和密码' }, { status: 400 })
   }
 
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return NextResponse.json({ error: '邮箱或密码错误' }, { status: 401 })

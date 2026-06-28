@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: '未登录' }, { status: 401 })
   }
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const user = await prisma.user.findUnique({ where: { id: session.userId } })
   if (!user || !user.verified) {
     return NextResponse.json({ error: '请先验证邮箱后再提交成绩' }, { status: 403 })
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ scores: [] })
   }
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const scores = await prisma.score.findMany({
     where: { userId: session.userId },
     orderBy: { createdAt: 'desc' },

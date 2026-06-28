@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ mails: [] })
   }
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const mails = await prisma.devMail.findMany({
     where: { OR: [{ userId: session.userId }, { toEmail: session.email }] },
     orderBy: { createdAt: 'desc' },
@@ -30,7 +30,7 @@ export async function DELETE(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: '未登录' }, { status: 401 })
   }
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   await prisma.devMail.deleteMany({
     where: { OR: [{ userId: session.userId }, { toEmail: session.email }] },
   })

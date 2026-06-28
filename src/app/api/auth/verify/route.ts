@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '验证码格式不正确（6 位数字）' }, { status: 400 })
   }
 
-  const prisma = getPrisma()
+  const prisma = await getPrisma()
   const record = await prisma.verificationCode.findFirst({
     where: { email: session.email, purpose: 'register', consumed: false },
     orderBy: { createdAt: 'desc' },
