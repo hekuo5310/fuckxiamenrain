@@ -1,4 +1,4 @@
-# 🚲 Pixel Ride · 雨中骑车上学路
+# Pixel Ride · 雨中骑车上学路
 
 > 一个吐槽 2026/06/26 厦门大雨的像素风第一人称骑车网页游戏。
 > 清晨下暴雨，可你还得骑车去上学。一手撑伞，一手扶把，
@@ -10,7 +10,7 @@
 
 ---
 
-## ✨ 特性
+## 特性
 
 - **第一人称像素渲染** — 320×200 低分辨率，硬边像素，暖色大地系调色（terracotta / sepia / moss / wheat），CRT 扫描线质感，无蓝紫。
 - **撑伞系统** — 空格切换。撑伞速度 −20%，水坑溅水伤害 −75%，雨天缓慢回血；收伞全速但雨大时持续掉血。
@@ -21,7 +21,7 @@
 - **开发邮箱面板** — 沙箱环境下验证码写入 `DevMail` 表，可在应用内直接查看并一键填入，端到端可玩。
 - **响应式** — 桌面键位 + 移动端虚拟按键，390×844 适配。
 
-## 🎮 操作
+## 操作
 
 | 按键 | 动作 |
 |------|------|
@@ -34,14 +34,14 @@
 
 移动端使用屏幕虚拟按键。
 
-## 🧱 技术栈
+## 技术栈
 
 - **Next.js 16**（App Router）+ **TypeScript** + **React 19**，经 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 适配到 Cloudflare Workers
 - **Tailwind CSS 4** + **shadcn/ui**（new-york）
 - **Cloudflare D1**（经 `@prisma/adapter-d1`，Prisma 驱动）+ **Email Send** + **KV**
 - 密码哈希 WebCrypto PBKDF2，session 用 HMAC 签名 cookie（无服务端存储，适配 Workers 无状态）
 
-## 📁 项目结构
+## 项目结构
 
 ```
 src/
@@ -68,7 +68,7 @@ wrangler.toml             # Cloudflare Workers 部署配置
 open-next.config.ts       # OpenNext 构建配置
 ```
 
-## 🚀 本地开发
+## 本地开发
 
 需要 Node 20+ 与 npm。本地 dev 经 OpenNext 的 `initOpenNextCloudflareForDev()` 启动 miniflare，让 `next dev` 也能拿到 wrangler.toml 的 D1/KV/Email 绑定。
 
@@ -91,7 +91,7 @@ npm run build                 # Next.js 构建
 
 > 本地 dev 下邮件不发真信，验证码落 DevMail 表，可在页面右侧 **开发邮箱** 面板查看，或读终端 `[mail] ...` 日志。
 
-## ☁️ Cloudflare 部署
+## Cloudflare 部署
 
 Next.js App Router 跑在 Workers 上，经 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 把 `next build` 产物编译成单个 Worker。
 
@@ -140,7 +140,7 @@ npm run cf:tail               # 实时日志
 
 本地 dev 不发真信，验证码落 DevMail 表供「开发邮箱」面板查看。
 
-## ✅ 部署就绪状态
+## 部署就绪状态
 
 D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本地 dev 与生产同源代码：
 
@@ -153,7 +153,7 @@ D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本�
 | session | HMAC-SHA256 签名 cookie，无服务端存储 |
 | 邮件 `email.ts` | 生产 `env.MAILER.send(EmailMessage)`；dev 落 DevMail 表 |
 
-### ⚠️ 部署前需验证（网络受限，无法在线确认精确 API）
+### 部署前需验证（网络受限，无法在线确认精确 API）
 
 1. **Prisma WASM engine** — Workers 不能跑 rust native query engine。确认 `@prisma/client` 在边缘用 WASM engine 生成。参考 Prisma 官方 Cloudflare D1 部署文档，可能需 `binaryTargets` 或 edge engine 配置。`npm run cf:build` 后若报 query engine 相关错误即此问题。
 2. **Workers 包大小** — Prisma WASM client 较大，免费版 Workers 1MB 压缩限制可能超限；付费版 10MB。`cf:build` 输出体积需检查。
@@ -162,7 +162,7 @@ D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本�
 
 > `db/custom.db` 为本地旧 SQLite 遗留，运行时不使用，可删。
 
-## 🗺 路线图
+## 路线图
 
 - 每日挑战 / 道具商店（雨衣、车铃、加速水）/ 成就系统 / 好友对战
 - 路面类型（减速带、下坡加速、逆风）、Boss 同学、昼夜循环
@@ -170,6 +170,6 @@ D1（Prisma adapter）+ Email Send + auth 均切到 Workers 原生实现，本�
 - Web Audio 合成 8-bit 音效（车铃、碰撞、雨声、心跳警告）
 - 排行榜分页 / 维度排序 / 个人最佳高亮 / 反作弊阈值
 
-## 📜 许可证
+## 许可证
 
 见 [LICENSE](./LICENSE)。
